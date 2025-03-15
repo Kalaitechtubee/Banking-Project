@@ -1,0 +1,73 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isValidPoll() {
+      let data = request.resource.data;
+      return data.keys().hasAll(['title', 'options', 'status', 'createdAt', 'createdBy']) &&
+        data.title is string &&
+        data.title.size() > 0 &&
+        data.status in ['active', 'inactive'] &&
+        data.createdAt is timestamp &&
+        data.createdBy is string &&
+        data.options is map &&
+        data.options.size() >= 2;
+    }
+
+    function isValidVote() {
+      let data = request.resource.data;
+      let oldData = resource.data;
+      return data.diff(oldData).affectedKeys().hasOnly(['options', 'voters']) &&
+        !(oldData.voters.hasAny([request.auth.uid]));
+    }
+
+    // Polls collection rules
+    match /polls/{pollId} {
+      // Anyone can read polls
+      allow read: if true;
+      
+      // Only admins can create polls
+      allow create: if isAdmin() && isValidPoll();
+      
+      // Only admins can update poll status
+      allow update: if isAdmin() && 
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status']);
+      
+      // Only admins can delete polls
+      allow delete: if isAdmin();
+      
+      // Allow users to vote
+      allow update: if isAuthenticated() && isValidVote();
+    }
+
+    // Users collection rules
+    match /users/{userId} {
+      // Users can read their own document
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+      
+      // Allow creation of user documents
+      allow create: if isAuthenticated() && 
+        request.auth.uid == userId &&
+        request.resource.data.keys().hasAll(['role', 'createdAt']) &&
+        request.resource.data.role in ['user', 'admin'];
+      
+      // Allow updates to lastUpdated field
+      allow update: if isAuthenticated() && 
+        request.auth.uid == userId &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['lastUpdated']);
+    }
+  }
+} 
