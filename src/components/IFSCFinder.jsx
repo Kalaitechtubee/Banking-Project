@@ -10,8 +10,7 @@ const DataFinder = () => {
 
   // API Keys
   const WEATHER_API_KEY = '0eec78474374203d92cbb7ed7152e79f';
-  const NEWS_API_KEY = 'ddbf13aadb5647ecb57f25b147a55590';
-
+  const NEWS_API_KEY = import.meta.env.VITE_NEWS_API_KEY;
   // Predefined news categories
   const newsCategories = [
     { label: 'Business', value: 'business' },
